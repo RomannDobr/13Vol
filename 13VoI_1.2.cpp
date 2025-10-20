@@ -49,7 +49,7 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 HWND CreateMessageWindow(HINSTANCE hInst);
 
 // Автозагрузка
-void autorun();
+bool autorun();
 
 // Клавиатурный хук
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
@@ -57,6 +57,14 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
 // --------------------- Главная функция ---------------------
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int)
 {
+    // Автозагрузка
+    LONG check = RegGetValueA(HKEY_CURRENT_USER,
+                              "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+                              "13Vol",
+                              RRF_RT_REG_SZ, 0, 0, 0);
+    if (check == ERROR_FILE_NOT_FOUND)
+        autorun(); // Добавляем в автозагрузку
+
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (!InitEndpointVolume())
         return -1;
@@ -82,13 +90,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int)
 
     UninitEndpointVolume();
     CoUninitialize();
-
-    // Автозагрузка
-    LONG check = RegGetValueA(HKEY_CURRENT_USER,
-                              "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", "d-clutch",
-                              RRF_RT_REG_SZ, 0, 0, 0);
-    if (check == 2)
-        autorun();
 
     return 0;
 }
@@ -418,4 +419,30 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
     }
 
     return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
+}
+
+// ---------- Автозагрузка ----------
+bool autorun()
+{
+    char exePath[MAX_PATH];
+    
+    // Получаем путь к исполняемому файлу
+    if (GetModuleFileNameA(NULL, exePath, MAX_PATH) == 0)
+        return false;
+
+    HKEY hKey = nullptr;
+    LONG result = RegOpenKeyExA(HKEY_CURRENT_USER,
+                                "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+                                0, KEY_WRITE, &hKey);
+
+    if (result != ERROR_SUCCESS)
+        return false;
+
+    // Добавляем в автозагрузку
+    result = RegSetValueExA(hKey, "13Vol", 0, REG_SZ, (const BYTE*)exePath,
+                            (DWORD)strlen(exePath) + 1);
+
+    RegCloseKey(hKey);
+
+    return (result == ERROR_SUCCESS);
 }
